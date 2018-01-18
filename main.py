@@ -19,98 +19,42 @@ class Blog(db.Model):
         self.title = title
         self.body = body
 
-
-class User(db.Model):
-
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True)
-    password = db.Column(db.String(120))
-    tasks = db.relationship('Task', backref='owner')
-
-    def __init__(self, email, password):
-        self.email = email
-        self.password = password
-
-
-@app.before_request
-def require_login():
-    allowed_routes = ['login', 'register']
-    if request.endpoint not in allowed_routes and 'email' not in session:
-        return redirect('/login')
-
-
-@app.route('/login', methods=['POST', 'GET'])
-def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        user = User.query.filter_by(email=email).first()
-        if user and user.password == password:
-            session['email'] = email
-            flash("Logged in")
-            print(session)
-            return redirect('/')
-        else:
-            flash('User password incorrect, or user does not exist', 'error')
-
-    return render_template('login.html')
-
-
-@app.route('/register', methods=['POST', 'GET'])
-def register():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        verify = request.form['verify']
-
-        # TODO - validate user's data
-
-        existing_user = User.query.filter_by(email=email).first()
-        if not existing_user:
-            new_user = User(email, password)
-            db.session.add(new_user)
-            db.session.commit()
-            session['email'] = email
-            return redirect('/')
-        else:
-            flash("The email <strong>{0}</strong> is already registered")
-
-    return render_template('register.html')
-
-
-@app.route('/logout')
-def logout():
-    del session['email']
-    return redirect('/login')
-
-@app.route('/', methods=['POST', 'GET'])
+@app.route('/blog', methods=['GET'])
 def index():
 
-    owner = User.query.filter_by(email=session['email']).first()
+    if request.args:
+        blog_id = request.args.get("id")
+        blog = Blog.query.get(blog_id)
+        
+        return render_template('singleBlogEntry.html', blog=blog)
+    else:
+        blogs = Blog.query.all()
+        return render_template('blogList.html', title = "Build A Blog", blogs=blogs)
 
+@app.route('/newpost', methods=['GET', 'POST'])
+def add_blog():
+    if request.method == 'GET':
+        return render_template('newBlogForm.html', title="Add Blog Entry")
     if request.method == 'POST':
-        task_name = request.form['task']
-        new_task = Task(task_name, owner)
-        db.session.add(new_task)
-        db.session.commit()
+        blog_title = request.form['title']
+        blog_body = request.form['body']
+        title_error = ""
+        body_error = ""
 
-    tasks = Task.query.filter_by(completed=False, owner=owner).all()
-    completed_tasks = Task.query.filter_by(completed=True, owner=owner).all()
-    return render_template('todos.html', title="Get It Done!",
-                           tasks=tasks, completed_tasks=completed_tasks)
+        if len(blog_title) <1:
+            body_error = "Please fill in the title"
 
+        if len(blog_body) <1:
+            body_error = "Please fill in the body"  
 
-@app.route('/delete-task', methods=['POST'])
-def delete_task():
-
-    task_id = int(request.form['task-id'])
-    task = Task.query.get(task_id)
-    task.completed = True
-    db.session.add(task)
-    db.session.commit()
-
-    return redirect('/')
-
+        if not title_error and not body_error:
+            new_blog = Blog(blog_title, blog_body)
+            db.session.add(new_blog)
+            db.session.commit()
+            query_param_url = "/blog?id=" + str(new_blog.id)
+            return redirect(query_param_url)
+        else:
+            return render_template('newBlogForm.html', title='Add Blog Entry', title_error=title_error, body_error=body_error)
 
 if __name__ == '__main__':
     app.run()
